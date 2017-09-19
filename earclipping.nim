@@ -1,26 +1,26 @@
-import math
 import basic2d
 import lists
 import sets
 import hashes
+import algorithm
 
 type
 
-    Triangle = tuple
-        a, b, c: Vector2d
-
     Edge = tuple
         a, b: Vector2d
-
-    WindingOrder = enum
-        woClockWise, woCounterClockWise
-
-    Polygon = seq[Vector2d]
 
     Vertex = DoublyLinkedNode[Vector2d]
 
     Angles = tuple
         convex, reflex: HashSet[Vertex]
+
+    Triangle* = tuple
+        a, b, c: Vector2d
+
+    WindingOrder* = enum
+        woClockWise, woCounterClockWise
+
+    Polygon* = seq[Vector2d]
 
 proc hash(v: Vertex): Hash =
     result = result !& v.value.x.hash
@@ -107,6 +107,7 @@ proc classify(vertices: DoublyLinkedRing[Vector2d]): Angles =
     return (convex, reflex)
 
 proc initialEars(angles: Angles): HashSet[Vertex] =
+    result = initSet[Vertex]()
     for v in angles.convex:
         if isEar(v, angles.reflex):
             result.incl v
@@ -124,7 +125,6 @@ proc clipNextEar(triangles: var seq[Triangle], vertices: var DoublyLinkedRing[Ve
 
 proc intersection(vec: Vector2d, edge: Edge): Vector2d =
     #if edge.a.x > vec.x or edge.b.x > vec.x
-
     let k = (edge.a.y - edge.b.y)
 
 iterator edges(polygon: Polygon): Edge =
@@ -187,7 +187,7 @@ proc resolveHole(polygon: Polygon, hole: Polygon, angles: Angles): Polygon =
 
     # Resolve
 
-proc triangulate*(polygon: Polygon, holes: seq[Polygon]): seq[Triangle] =
+proc triangulate*(polygon: Polygon, holes: openArray[Polygon]): seq[Triangle] =
     result = newSeq[Triangle]()
 
     var vertices = initDoublyLinkedRing[Vector2d]()
@@ -207,3 +207,34 @@ proc triangulate*(polygon: Polygon, holes: seq[Polygon]): seq[Triangle] =
 
     var head = vertices.head
     result.add((head.next.value, head.next.next.value, head.value))
+
+proc triangulate*(polygon: Polygon): seq[Triangle] =
+    triangulate(polygon, [])
+
+proc windingOrder*(polygon: Polygon): WindingOrder =
+    var nClockWise = 0
+    var nCounterClockwise = 0
+
+    proc count(v1, v2, v3: Vector2d) =
+        let e1 = v1 - v2
+        let e2 = v3 - v2
+
+        let val = e1.x * e2.y - e1.y * e2.x
+
+        if   val < 0: nClockWise.inc
+        elif val > 0: nCounterClockwise.inc
+
+    for i in 0 .. polygon.high:
+        count polygon[i], polygon[(i + 1) mod polygon.len], polygon[(i + 2) mod polygon.len]
+
+    return 
+        if nClockWise > nCounterClockwise:
+            woClockwise
+        else:
+            woCounterClockwise
+
+proc enforceWindingOrder*(polygon: Polygon, order: WindingOrder): Polygon =
+    if polygon.windingOrder == order:
+        polygon
+    else:
+        polygon.reversed
